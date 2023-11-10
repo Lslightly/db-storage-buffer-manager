@@ -1,6 +1,8 @@
 #ifndef BUF_MGR_H
 #define BUF_MGR_H
 
+#include <fstream>
+#include <functional>
 #include <string>
 namespace DB {
 
@@ -24,20 +26,9 @@ struct BCB {
     BCB* next;
 };
 
-// page/frame map
-class PFMap {
-public:
-    PFMap() = delete;
-    static BCB* p2bcb(int pageID);
-    static int f2p(int frameID);
-private:
-    static BCB hashPage2BCB[BUFSIZE];
-    static int tableFrame2Page[BUFSIZE];
-};
-
 class DSMgr {
 public:
-    DSMgr();
+    DSMgr(): numPages(0) {}
     /*
         This function is called anytime a file needs to be opened for reading or writing. The prototype for this function is OpenFile(String filename) and returns an error code. The function opens the file specified by the filename.
     */
@@ -57,7 +48,7 @@ public:
     //  This function moves the file pointer.
     int Seek(int offset, int pos);
     //  This function returns the current file.
-    FILE * GetFile();
+    std::fstream& GetFile();
     //  This function increments the page counter.
     void IncNumPages();
     //  This function returns the page counter.
@@ -70,7 +61,7 @@ public:
     int GetUse(int page_id);
     const std::string dbFile = "data.dbf";
 private:
-    FILE *currFile;
+    std::fstream currFile;
     int numPages;
     int pages[MAXPAGES];
 };
@@ -108,7 +99,7 @@ public:
     /*
         This function selects a frame to replace. If the dirty bit of the selected frame is set then the page needs to be written on to the disk.
     */
-    virtual int selectVictim();
+    virtual int SelectVictim();
     /*
         It takes the page_id as the parameter and returns the frame id.
     */
@@ -138,7 +129,12 @@ public:
     */
     void PrintFrame(int frame_id);
 private:
+    std::function<int(int)> hash = [](int pageID) -> int {
+        return pageID % BUFSIZE;
+    };
     // Hash Table
+    BCB* p2bcb(int pageID, const std::function<int(int)>& hash);
+    int f2p(int frameID);
     int ftop[BUFSIZE];
     BCB* ptof[BUFSIZE];
 };
