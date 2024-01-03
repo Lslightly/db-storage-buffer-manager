@@ -1,6 +1,7 @@
 #include "Mgr.h"
 #include <functional>
 #include <system_error>
+#include "spdlog/spdlog.h"
 
 namespace DB {
 
