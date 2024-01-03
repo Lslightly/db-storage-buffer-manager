@@ -3,6 +3,7 @@
 
 #include <fstream>
 #include <functional>
+#include <memory>
 #include <string>
 namespace DB {
 
@@ -16,14 +17,21 @@ struct bFrame {
 
 extern bFrame GlobalBuf[BUFSIZE];
 
-struct BCB {
-    BCB();
+class BCB {
+public:
+    BCB(int pageid, int frameid)
+    : pageID(pageid), frameID(frameid), latch(0), count(0), dirty(0), next(nullptr) {}
     int pageID;
     int frameID;
     int latch;
     int count;
     int dirty;
     BCB* next;
+};
+
+enum UseStatus {
+    Used,
+    Free,
 };
 
 class DSMgr {
@@ -59,7 +67,6 @@ public:
     void SetUse(int page_id, int use_bit);
     //  This function returns the current use_bit for the corresponding page_id.
     int GetUse(int page_id);
-    const std::string dbFile = "data.dbf";
 private:
     std::fstream currFile;
     int numPages;
@@ -74,6 +81,7 @@ using NewPage = struct{
 class BMgr {
 public:
     BMgr();
+    ~BMgr();
     // Interface functions
     /*
         return the frame_id of the page
@@ -103,7 +111,7 @@ public:
     /*
         It takes the page_id as the parameter and returns the frame id.
     */
-    int Hash(int page_id);
+    static int Hash(int page_id);
     /*
         This function removes the Buffer Control Block for the page_id from the array. This is only called if the SelectVictim() function needs to replace a frame.
     */
@@ -129,16 +137,15 @@ public:
     */
     void PrintFrame(int frame_id);
 private:
-    std::function<int(int)> hash = [](int pageID) -> int {
-        return pageID % BUFSIZE;
-    };
     // Hash Table
-    BCB* p2bcb(int pageID, const std::function<int(int)>& hash);
+    BCB* p2bcb(int pageID, int(*hash)(int));
     int f2p(int frameID);
     int ftop[BUFSIZE];
     BCB* ptof[BUFSIZE];
+    std::shared_ptr<DSMgr> dsmgr;
+    const std::string dbFile = "data.dbf";
 };
 
 } // namespace DB
-            
+
 #endif

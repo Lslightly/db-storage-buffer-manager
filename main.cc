@@ -1,4 +1,10 @@
+#include <cstdlib>
+#include <exception>
 #include <iostream>
+#include <argparse/argparse.hpp>
+#include <defer/defer.hpp>
+#include <spdlog/spdlog.h>
+#include "Mgr.h"
 
 /*
 In our project, you are required to perform a trace-driven experiment to demonstrate your
@@ -12,7 +18,26 @@ need to be first materialized in the disk, which corresponds to the directory-ba
 data.dbf
 */
 
-int main() {
-    std::cout << "Hello, World!" << std::endl;
+const std::string OptCreateDB = "create-db";
+
+int main(int argc, char *argv[]) {
+    argparse::ArgumentParser program("BufMgr", "0.0.1");
+    program.add_argument(OptCreateDB)
+            .help("create data.dbf with 50000 pages")
+            .default_value(false);
+    try {
+        program.parse_args(argc, argv);
+    } catch (const std::exception& e) {
+        spdlog::error(e.what());
+        spdlog::error(program);
+        std::exit(1);
+    }
+    DB::BMgr mgr;
+    if (program[OptCreateDB] == true) {
+        spdlog::info("creating data.dbf...");
+        for (int i = 0; i < DB::MAXPAGES; i++) {
+            mgr.FixNewPage();
+        }
+    }
     return 0;
 }
