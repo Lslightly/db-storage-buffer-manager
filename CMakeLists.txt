@@ -14,7 +14,7 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 add_subdirectory(src)
 add_subdirectory(unittest)
 aux_source_directory(. DIR_SRCS)
-add_executable(DSBufMgr ${DIR_SRCS})
-target_link_libraries(DSBufMgr PUBLIC
+add_executable(DBDriver ${DIR_SRCS})
+target_link_libraries(DBDriver PUBLIC
     MgrCore
 )

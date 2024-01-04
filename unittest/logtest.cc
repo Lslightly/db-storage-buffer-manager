@@ -35,6 +35,7 @@ TEST(spdlogTest, fileLogger) {
     try 
     {
         auto logger = spdlog::basic_logger_mt("basic_logger", "logs/basic-log.txt");
+        spdlog::info("testing...");
     }
     catch (const spdlog::spdlog_ex &ex)
     {

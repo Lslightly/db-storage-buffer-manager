@@ -1,10 +1,14 @@
 #ifndef BUF_MGR_H
 #define BUF_MGR_H
 
+#include "spdlog/logger.h"
 #include <fstream>
 #include <functional>
 #include <memory>
 #include <string>
+#include <tuple>
+
+
 namespace DB {
 
 const int BUFSIZE = 1024;
@@ -16,11 +20,13 @@ struct bFrame {
 };
 
 extern bFrame GlobalBuf[BUFSIZE];
+bFrame* getFrameFromBuf(int frameID);
+void setFrameToBuf(int frameID, bFrame& frame);
 
 class BCB {
 public:
     BCB(int pageid, int frameid)
-    : pageID(pageid), frameID(frameid), latch(0), count(0), dirty(0), next(nullptr) {}
+    : pageID(pageid), frameID(frameid), latch(0), count(1), dirty(0), next(nullptr) {}
     int pageID;
     int frameID;
     int latch;
@@ -29,7 +35,7 @@ public:
     BCB* next;
 };
 
-enum UseStatus {
+enum PageStatus {
     Used,
     Free,
 };
@@ -52,7 +58,7 @@ public:
     /*
         This function is called whenever a page is taken out of the buffer. The prototype is WritePage(frame_id, frm) and returns how many bytes were written. This function calls fseek() and fwrite() to save data into a file.
     */
-    int WritePage(int frame_id, bFrame frm);
+    int WritePage(int frame_id, bFrame& frm);
     //  This function moves the file pointer.
     int Seek(int offset, int pos);
     //  This function returns the current file.
@@ -73,14 +79,14 @@ private:
     int pages[MAXPAGES];
 };
 
-using NewPage = struct{
-    int pageID;
+struct NewPage {
     int frameID;
+    int pageID;
 };
 
 class BMgr {
 public:
-    BMgr();
+    BMgr(std::string dbname="data.dbf");
     ~BMgr();
     // Interface functions
     /*
@@ -137,13 +143,66 @@ public:
     */
     void PrintFrame(int frame_id);
 private:
-    // Hash Table
-    BCB* p2bcb(int pageID, int(*hash)(int));
-    int f2p(int frameID);
-    int ftop[BUFSIZE];
+    const int FrameUnused = -1;
+    int numUsedFrames = 0;
+    int ftop[BUFSIZE]; // -1 means frame is not used
     BCB* ptof[BUFSIZE];
-    std::shared_ptr<DSMgr> dsmgr;
-    const std::string dbFile = "data.dbf";
+    std::shared_ptr<DSMgr> dsMgr;
+    std::string dbFile;
+    /**
+     * @brief find free frame for pageID
+     * 
+     * @param pageID 
+     * @return std::tuple<int, bool> [frameID, found]
+     */
+    std::tuple<int, bool> findFreeFrameForPage(int pageID);
+    // (frameID+1) % BUFSIZE
+    int incFrame(int frameID) { return (frameID+1) % BUFSIZE; }
+    BCB* addNewBCB(int frameID, int pageID) {
+        int pageHash = Hash(pageID);
+        auto* bcbListP = ptof[pageHash];
+        auto* newBCB = new BCB(pageID, frameID);
+        if (!bcbListP) { // no BCB list yet
+            ptof[pageHash] = newBCB;
+            return newBCB;
+        }
+
+        // add to tail
+        while (bcbListP->next) {
+            bcbListP = bcbListP->next;
+        }
+        bcbListP->next = newBCB;
+        return newBCB;
+    }
+    // find BCB for pageID
+    BCB* p2bcb(int pageID) {
+        int val = Hash(pageID);
+        auto* bcb = ptof[val];
+        while (bcb) {
+            if (bcb->pageID == pageID) {
+                return bcb;
+            }
+            bcb = bcb->next;
+        }
+        return nullptr;
+    }
+    int f2p(int frameID) {
+        return ftop[frameID];
+    }
+    bool isBufferFull() { return NumFreeFrames() == 0; }
+    bool isFrameUsed(int frameID) { return !(ftop[frameID] == FrameUnused); }
+    void setFrameToPage(int frameID, int pageID) {
+        if (!isFrameUsed(frameID)) {
+            numUsedFrames++;
+        }
+        ftop[frameID] = pageID;
+    }
+    void unsetFrame(int frameID) {
+        if (isFrameUsed(frameID)) {
+            numUsedFrames--;
+        }
+        ftop[frameID] = FrameUnused;
+    }
 };
 
 } // namespace DB

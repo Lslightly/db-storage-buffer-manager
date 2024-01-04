@@ -2,12 +2,19 @@
 #include <functional>
 #include <memory>
 #include <system_error>
+#include <tuple>
 #include <utility>
+#include "spdlog/logger.h"
+#include "spdlog/sinks/basic_file_sink.h"
 #include "spdlog/spdlog.h"
 
 namespace DB {
 
 bFrame GlobalBuf[BUFSIZE];
+bFrame* getFrameFromBuf(int frameID) { return &GlobalBuf[frameID]; }
+void setFrameToBuf(int frameID, bFrame &frame) {
+    GlobalBuf[frameID] = frame;
+}
 
 int DSMgr::OpenFile(std::string filename) {
     try {
@@ -35,7 +42,7 @@ bFrame DSMgr::ReadPage(int page_id)
     return tmp;
 }
 
-int DSMgr::WritePage(int frame_id, bFrame frm)
+int DSMgr::WritePage(int frame_id, bFrame& frm)
 {
     currFile.seekp(frame_id*FRAMESIZE);
     auto before = currFile.tellp();
@@ -86,23 +93,37 @@ int DSMgr::GetUse(int page_id)
     return pages[page_id];
 }
 
-BMgr::BMgr()
+BMgr::BMgr(std::string dbname): dbFile(dbname)
 {
-    dsmgr = std::make_shared<DSMgr>(new DSMgr());
-    dsmgr->OpenFile(dbFile);
+    numUsedFrames = 0;
+    dsMgr = std::make_shared<DSMgr>();
+    dsMgr->OpenFile(dbFile);
     for (int i = 0; i < BUFSIZE; i++) {
-        ftop[i] = 0;
+        ftop[i] = FrameUnused;
         ptof[i] = nullptr;
     }
 }
 
 BMgr::~BMgr() {
-    dsmgr->CloseFile();
+    WriteDirtys();
+    for (int i = 0; i < BUFSIZE; i++) {
+        auto* bcb = ptof[i];
+        if (bcb) {
+            auto* bcbNext = bcb->next;
+            delete bcb;
+            while (bcbNext) {
+                bcb = bcbNext;
+                bcbNext = bcb->next;
+                delete bcb;
+            }
+        }
+    }
+    dsMgr->CloseFile();
 }
 
 int BMgr::FixPage(int pageID, int prot)
 {
-    auto* bcb = p2bcb(pageID, Hash);
+    auto* bcb = p2bcb(pageID);
     if (bcb) {
         return bcb->frameID;
     } else {
@@ -112,30 +133,49 @@ int BMgr::FixPage(int pageID, int prot)
 }
 
 NewPage BMgr::FixNewPage() {
-    dsmgr->IncNumPages();
-    auto newpageid = dsmgr->GetNumPages();
-    dsmgr->SetUse(newpageid, UseStatus::Used);
+    spdlog::debug("Fix New Page...");
 
-    auto newframeid = Hash(newpageid);
-    auto* newbcb = new BCB(newpageid, newframeid);
+    auto newPageId = dsMgr->GetNumPages();
+    spdlog::debug("new page id {}", newPageId);
+    dsMgr->IncNumPages();
 
-    // link to ptof[newpageid] bucket list
-    if (ptof[newpageid] == nullptr) {
-        ptof[newpageid] = newbcb;
-    } else {
-        auto* listp = ptof[newpageid];
-        while (listp->next != nullptr) {
-            listp = listp->next;
+    dsMgr->SetUse(newPageId, PageStatus::Used);
+    bFrame newFrame;
+    dsMgr->WritePage(newPageId, newFrame);
+
+    auto [newFrameId, found] = findFreeFrameForPage(newPageId);
+    if (!found) { // use victimFrameId as new frame
+        spdlog::debug("no free frame, finding victim...");
+        auto victimFrameId = SelectVictim();
+        auto victimPageId = f2p(victimFrameId);
+        spdlog::debug("victim (frame, page) = ({}, {})", victimFrameId, victimPageId);
+
+        auto* bcb = p2bcb(victimPageId);
+        if (bcb->dirty) {
+            spdlog::debug("write dirty page...");
+            dsMgr->WritePage(victimPageId, *getFrameFromBuf(victimFrameId));
         }
-        listp->next = newbcb;
+        bcb->pageID = newPageId;
+        bcb->count = 1;
+        bcb->dirty = 0;
+        bcb->latch = 0;
+        setFrameToBuf(victimFrameId, newFrame);
+
+        spdlog::debug("map frame({}) -> page({})", victimFrameId, newPageId);
+        setFrameToPage(victimFrameId, newPageId);
+        return {victimFrameId, newPageId};
     }
-    
-    ftop[newframeid] = newpageid;
-    return {newpageid, newframeid};
+
+    setFrameToBuf(newFrameId, newFrame);
+
+    spdlog::debug("find free frame {0}, map frame({0}) -> page({1})", newFrameId, newPageId);
+    setFrameToPage(newFrameId, newPageId);
+    addNewBCB(newFrameId, newPageId);
+    return {newFrameId, newPageId};
 }
 
 int BMgr::UnfixPage(int pageID) {
-    auto* bcb = p2bcb(pageID, Hash);
+    auto* bcb = p2bcb(pageID);
     if (bcb) {
         // TODO
         return bcb->frameID;
@@ -146,8 +186,7 @@ int BMgr::UnfixPage(int pageID) {
 }
 
 int BMgr::NumFreeFrames() {
-    // TODO
-    return 0;
+    return BUFSIZE-numUsedFrames;
 }
 
 int BMgr::SelectVictim() {
@@ -183,20 +222,17 @@ void BMgr::PrintFrame(int frameID) {
     // TODO
 }
 
-BCB* BMgr::p2bcb(int pageID, int(*hash)(int)) {
-    int val = hash(pageID);
-    auto bcb = ptof[val];
-    while (bcb) {
-        if (bcb->pageID == pageID) {
-            return bcb;
-        }
-        bcb = bcb->next;
+std::tuple<int, bool> BMgr::findFreeFrameForPage(int pageID) {
+    spdlog::debug("findFreeFrameForPage...");
+    if (isBufferFull()) {
+        return std::make_tuple(0, false);
     }
-    return nullptr;
-}
-
-int BMgr::f2p(int frameID) {
-    return ftop[frameID];
+    int pageHash = Hash(pageID);
+    auto tryFrameID = pageHash;
+    while (isFrameUsed(tryFrameID)) {
+        tryFrameID = incFrame(tryFrameID);
+    }
+    return std::make_tuple(tryFrameID, true);
 }
 
 } // namespace DB
