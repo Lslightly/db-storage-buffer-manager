@@ -4,6 +4,7 @@
 #include <system_error>
 #include <tuple>
 #include <utility>
+#include <vector>
 #include "spdlog/logger.h"
 #include "spdlog/sinks/basic_file_sink.h"
 #include "spdlog/spdlog.h"
@@ -16,86 +17,11 @@ void setFrameToBuf(int frameID, bFrame &frame) {
     GlobalBuf[frameID] = frame;
 }
 
-int DSMgr::OpenFile(std::string filename) {
-    try {
-        currFile.open(filename, std::ios::in | std::ios::out);
-    } catch (const std::system_error& e) {
-        return e.code().value();
-    }
-    return 0;
-}
-
-int DSMgr::CloseFile() {
-    try {
-        currFile.close();
-    } catch (const std::system_error& e) {
-        return e.code().value();
-    }
-    return 0;
-}
-
-bFrame DSMgr::ReadPage(int page_id)
-{
-    bFrame tmp;
-    currFile.seekg(page_id*FRAMESIZE);
-    currFile.read(tmp.field, FRAMESIZE);
-    return tmp;
-}
-
-int DSMgr::WritePage(int frame_id, bFrame& frm)
-{
-    currFile.seekp(frame_id*FRAMESIZE);
-    auto before = currFile.tellp();
-    currFile.write(frm.field, FRAMESIZE);
-    auto after = currFile.tellp();
-    return after - before;
-}
-
-int DSMgr::Seek(int offset, int pos)
-{
-    if (pos == 0) { // 从文件开始
-        currFile.seekg(offset, std::ios::beg);
-        currFile.seekp(offset, std::ios::beg);
-    } else if (pos == 1) { // 从当前位置
-        currFile.seekg(offset, std::ios::cur);
-        currFile.seekp(offset, std::ios::cur);
-    } else if (pos == 2) { // 从文件结束
-        currFile.seekg(offset, std::ios::end);
-        currFile.seekp(offset, std::ios::end);
-    } else {
-        return -1; // 错误的pos值
-    }
-    return 0;
-}
-
-std::fstream &DSMgr::GetFile()
-{
-    return currFile;
-}
-
-void DSMgr::IncNumPages()
-{
-    numPages++;
-}
-
-int DSMgr::GetNumPages()
-{
-    return numPages;
-}
-
-void DSMgr::SetUse(int page_id, int use_bit)
-{
-    pages[page_id] = use_bit;
-}
-
-int DSMgr::GetUse(int page_id)
-{
-    return pages[page_id];
-}
-
 BMgr::BMgr(std::string dbname): dbFile(dbname)
 {
-    numUsedFrames = 0;
+    for (int i = 0; i < BUFSIZE; i++) {
+        freeFrames.insert(i);
+    }
     dsMgr = std::make_shared<DSMgr>();
     dsMgr->OpenFile(dbFile);
     for (int i = 0; i < BUFSIZE; i++) {
@@ -141,7 +67,8 @@ NewPage BMgr::FixNewPage() {
 
     dsMgr->SetUse(newPageId, PageStatus::Used);
     bFrame newFrame;
-    dsMgr->WritePage(newPageId, newFrame);
+    auto size = dsMgr->WritePage(newPageId, newFrame);
+    spdlog::debug("write {} with size {}", newPageId, size);
 
     auto [newFrameId, found] = findFreeFrameForPage(newPageId);
     if (!found) { // use victimFrameId as new frame
@@ -150,15 +77,9 @@ NewPage BMgr::FixNewPage() {
         auto victimPageId = f2p(victimFrameId);
         spdlog::debug("victim (frame, page) = ({}, {})", victimFrameId, victimPageId);
 
-        auto* bcb = p2bcb(victimPageId);
-        if (bcb->dirty) {
-            spdlog::debug("write dirty page...");
-            dsMgr->WritePage(victimPageId, *getFrameFromBuf(victimFrameId));
-        }
-        bcb->pageID = newPageId;
-        bcb->count = 1;
-        bcb->dirty = 0;
-        bcb->latch = 0;
+        auto* bcb = replacePageIDInBCB(victimPageId, newPageId);
+        
+        spdlog::debug("writing new frame...");
         setFrameToBuf(victimFrameId, newFrame);
 
         spdlog::debug("map frame({}) -> page({})", victimFrameId, newPageId);
@@ -186,7 +107,7 @@ int BMgr::UnfixPage(int pageID) {
 }
 
 int BMgr::NumFreeFrames() {
-    return BUFSIZE-numUsedFrames;
+    return BUFSIZE-freeFrames.size();
 }
 
 int BMgr::SelectVictim() {
@@ -227,12 +148,57 @@ std::tuple<int, bool> BMgr::findFreeFrameForPage(int pageID) {
     if (isBufferFull()) {
         return std::make_tuple(0, false);
     }
-    int pageHash = Hash(pageID);
-    auto tryFrameID = pageHash;
-    while (isFrameUsed(tryFrameID)) {
-        tryFrameID = incFrame(tryFrameID);
-    }
-    return std::make_tuple(tryFrameID, true);
+    return std::make_tuple(*freeFrames.begin(), true);
 }
 
-} // namespace DB
+BCB* BMgr::replacePageIDInBCB(int victimPageID, int newPageID) {
+    auto victimHash = Hash(victimPageID);
+    auto* bcb = ptof[victimHash];
+    if (!bcb) {
+        spdlog::error("ensure bcb exists when calling replacePageID(ptof[{}]).", victimHash);
+        exit(1);
+    }
+
+    BCB* res = nullptr;
+    if (bcb->pageID == victimPageID) { // the head of the list is the wanted bcb
+        res = bcb;
+        ptof[victimHash] = res->next; // remove res from list
+    } else {
+        auto* bcbPrev = bcb;
+        bcb = bcb->next;
+        while (bcb) {
+            if (bcb->pageID == victimPageID) {
+                res = bcb;
+                bcbPrev->next = res->next; // remove res from list
+                break;
+            }
+            bcbPrev = bcb;
+            bcb = bcb->next;
+        }
+        if (!bcb) {
+            spdlog::error("ensure bcb exists when calling replacePageID({} does not exist in bcb list of ptof[{}]).", victimPageID, victimHash);
+            exit(1);
+        }
+    }
+
+    // set res as the head of ptof[newHash]
+    auto newHash = Hash(newPageID);
+    auto* oldHead = ptof[newHash];
+    ptof[newHash] = res;
+    res->next = oldHead;
+
+    // write victim page
+    if (res->dirty) {
+        spdlog::debug("writing victim page {}", victimPageID);
+        dsMgr->WritePage(victimPageID, *getFrameFromBuf(res->frameID));
+    }
+
+    res->pageID = newPageID;
+    res->count = 1;
+    res->dirty = 0;
+    res->latch = 0;
+
+    return res;
+}
+
+}
