@@ -35,7 +35,7 @@ int main(int argc, char *argv[]) {
             .default_value(std::string("data.dbf"));
     program.add_argument(OptLogLevel)
             .help("log level. 6 for off, 1 for debug, 2 for info, 4 for err")
-            .default_value(6)
+            .default_value(2)
             .scan<'i', int>();
     try {
         program.parse_args(argc, argv);

@@ -16,6 +16,8 @@ namespace DB {
 
 const int BUFSIZE = 1024;
 
+void initFrame(bFrame& frame, int pageID);
+
 extern bFrame GlobalBuf[BUFSIZE];
 bFrame* getFrameFromBuf(int frameID);
 void setFrameToBuf(int frameID, bFrame& frame);
@@ -60,7 +62,7 @@ public:
 
     // Internal Functions
     /*
-        This function selects a frame to replace. If the dirty bit of the selected frame is set then the page needs to be written on to the disk.
+        This function selects a frame to replace. If the dirty bit of the selected frame is set then the page needs to be written on to the disk. The according BCB will also be removed. 
     */
     virtual int SelectVictim();
     /*
@@ -106,16 +108,15 @@ private:
      */
     std::tuple<int, bool> findFreeFrameForPage(int pageID);
 
-    /**
-     * @brief replace pageID of bcb from victimPageID to newPageID without frameID changed
-     * 
-     * @param victimPageID 
-     * @param newPageID 
-     * @return BCB* the BCB changed
-     */
-    BCB* replacePageIDInBCB(int victimPageID, int newPageID);
     // (frameID+1) % BUFSIZE
     int incFrame(int frameID) { return (frameID+1) % BUFSIZE; }
+    /**
+     * @brief add new BCB for (frameID, pageID) at the begin of ptof[pageID] bcb list
+     * 
+     * @param frameID 
+     * @param pageID 
+     * @return BCB* 
+     */
     BCB* addNewBCB(int frameID, int pageID) {
         auto pageHash = Hash(pageID);
         auto* bcbListP = ptof[pageHash];
@@ -126,15 +127,13 @@ private:
             return newBCB;
         }
 
-        // add to tail
-        while (bcbListP->next) {
-            bcbListP = bcbListP->next;
-        }
-        bcbListP->next = newBCB;
-        spdlog::debug("add new BCB at the end of list in ptof[{}]", pageHash);
+        newBCB->next = bcbListP->next;
+        ptof[pageHash] = newBCB;
+        spdlog::debug("add new BCB(frameID: {}, pageID: {}) at the begin of ptof[{}] list", frameID, pageID, pageHash);
+
         return newBCB;
     }
-    // find BCB for pageID
+    // find BCB for pageID, return nullptr if not found.
     BCB* p2bcb(int pageID) {
         int val = Hash(pageID);
         auto* bcb = ptof[val];
@@ -148,12 +147,23 @@ private:
         return nullptr;
     }
 
+    BCB* f2bcb(int frameID) {
+        auto pageID = f2p(frameID);
+        auto* bcb = p2bcb(pageID);
+        if (!bcb) {
+            spdlog::error("should find bcb for (frame: {}, page: {}", frameID, pageID);
+            exit(1);
+        }
+        return bcb;
+    }
+
     int f2p(int frameID) {
         return ftop[frameID];
     }
     bool isBufferFull() { return freeFrames.size() == 0; }
     bool isFrameUsed(int frameID) { return !(ftop[frameID] == FrameUnused); }
     void setFrameToPage(int frameID, int pageID) {
+        spdlog::debug("set frame {} to page {}", frameID, pageID);
         if (!isFrameUsed(frameID)) {
             freeFrames.erase(frameID);
         }
