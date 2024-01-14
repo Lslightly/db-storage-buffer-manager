@@ -1,5 +1,6 @@
 #include "DSMgr.h"
 #include "BMgr.h"
+#include <cstdlib>
 #include <functional>
 #include <memory>
 #include <system_error>
@@ -15,7 +16,11 @@ namespace DB {
 int DSMgr::OpenFile(std::string filename) {
     try {
         fileName = filename;
-        currFile.open(filename, std::ios::in | std::ios::out | std::ios::app);
+        if (truncFile) {
+            currFile.open(filename, std::ios::in | std::ios::trunc | std::ios::out);
+        } else {
+            currFile.open(filename, std::ios::in | std::ios::out);
+        }
     } catch (const std::system_error& e) {
         spdlog::error("error occurs when opening file {} with error code {}", filename, e.code().value());
         exit(e.code().value());
@@ -37,7 +42,11 @@ bFrame DSMgr::ReadPage(int pageID)
 {
     bFrame tmp;
     currFile.seekg(pageID*FRAMESIZE);
+    auto before = currFile.tellg();
     currFile.read(tmp.field, FRAMESIZE);
+    auto after = currFile.tellg();
+    spdlog::debug("read page {} with size {}", pageID, after-before);
+    spdlog::debug("read content {}", tmp.field);
     return tmp;
 }
 
@@ -47,6 +56,7 @@ int DSMgr::WritePage(int pageID, bFrame& frm)
     auto before = currFile.tellp();
     currFile.write(frm.field, FRAMESIZE);
     auto after = currFile.tellp();
+    spdlog::debug("write page {} with content {}", pageID, frm.field);
     return after - before;
 }
 

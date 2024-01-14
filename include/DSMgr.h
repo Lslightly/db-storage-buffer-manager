@@ -27,7 +27,7 @@ enum PageStatus {
 
 class DSMgr {
 public:
-    DSMgr(): numPages(0) {}
+    DSMgr(bool trunc=false): truncFile(trunc), numPages(0) {}
     /*
         This function is called anytime a file needs to be opened for reading or writing. The prototype for this function is OpenFile(String filename) and returns an error code. The function opens the file specified by the filename.
     */
@@ -63,6 +63,7 @@ private:
     std::fstream currFile;
     int numPages;
     int pages[MAXPAGES];
+    bool truncFile;
 };
 
 struct NewPage {

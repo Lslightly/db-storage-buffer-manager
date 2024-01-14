@@ -1,9 +1,12 @@
 #include <cstdlib>
 #include <exception>
+#include <fstream>
 #include <iostream>
 #include <argparse/argparse.hpp>
 #include <defer/defer.hpp>
 #include <spdlog/spdlog.h>
+#include <string>
+#include <vector>
 #include "DSMgr.h"
 #include "BMgr.h"
 #include "spdlog/common.h"
@@ -23,6 +26,9 @@ data.dbf
 const std::string OptCreateDB = "-create-db";
 const std::string OptDBName = "-db-name";
 const std::string OptLogLevel = "-log-level";
+const std::string OptBenchFile = "-bench-file";
+
+void runBench(std::string benchFile, DB::BMgr& mgr);
 
 int main(int argc, char *argv[]) {
     argparse::ArgumentParser program("DBDriver", "0.0.1");
@@ -37,19 +43,66 @@ int main(int argc, char *argv[]) {
             .help("log level. 6 for off, 1 for debug, 2 for info, 4 for err")
             .default_value(2)
             .scan<'i', int>();
+    program.add_argument(OptBenchFile)
+            .help("benchmark file")
+            .default_value(std::string("test/data-5w-50w-zipf.txt"));
     try {
         program.parse_args(argc, argv);
     } catch (const std::exception& e) {
         spdlog::error(e.what());
         std::exit(1);
     }
-    DB::BMgr mgr(program.get<std::string>(OptDBName));
+
+    DB::DSMgr dsmgr(program.get<bool>(OptCreateDB));
+    dsmgr.OpenFile(program.get<std::string>(OptDBName));
+    DB::BMgr mgr(&dsmgr);
+
     spdlog::set_level(spdlog::level::level_enum(program.get<int>(OptLogLevel)));
+    spdlog::set_pattern("[%^%l%$] %v");
+
+    if (program.is_used(OptCreateDB) && program.is_used(OptBenchFile)) {
+        spdlog::error("{} and {} are exclusive.", OptCreateDB, OptBenchFile);
+        exit(1);
+    }
     if (program[OptCreateDB] == true) {
         spdlog::info("creating data.dbf...");
         for (int i = 0; i < DB::MAXPAGES; i++) {
             mgr.FixNewPage();
         }
+        return 0;
+    }
+    if (program[OptBenchFile] == true) {
+        std::string workloadFileName = program.get<std::string>(OptBenchFile);
+        runBench(workloadFileName, mgr);
     }
     return 0;
+}
+
+void runBench(std::string benchFileName, DB::BMgr& mgr) {
+    spdlog::info("Running benchmark for {}...", benchFileName);
+
+    std::fstream benchFile;
+    try {
+        benchFile.open(benchFileName, std::ios::in);
+    } catch (const std::system_error& e) {
+        spdlog::error("error occurs when opening file {} with error code {}", benchFileName, e.code().value());
+        exit(e.code().value());
+    }
+    defer [&]{benchFile.close();};
+
+    std::vector<DB::Op> oplist;
+    oplist.reserve(50000);
+
+    std::string line;
+    while (std::getline(benchFile, line)) {
+        auto iter = line.find_first_of(",");
+        auto op = std::atoi(line.substr(0, iter).c_str());
+        auto pageID = std::atoi(line.substr(iter + 1).c_str());
+        oplist.push_back(DB::Op{
+            bool(op),
+            pageID,
+        });
+    }
+
+    mgr.ExecOpList(oplist);
 }

@@ -9,6 +9,7 @@
 #include <set>
 #include <string>
 #include <tuple>
+#include <vector>
 
 #include "DSMgr.h"
 
@@ -25,7 +26,7 @@ void setFrameToBuf(int frameID, bFrame& frame);
 class BCB {
 public:
     BCB(int pageid, int frameid)
-    : pageID(pageid), frameID(frameid), latch(0), count(1), dirty(0), next(nullptr) {}
+    : pageID(pageid), frameID(frameid), latch(0), count(0), dirty(0), next(nullptr) {}
     int pageID;
     int frameID;
     int latch;
@@ -34,10 +35,15 @@ public:
     BCB* next;
 };
 
+struct Op {
+    bool isWrite;
+    int pageID;
+};
+
 
 class BMgr {
 public:
-    BMgr(std::string dbname="data.dbf");
+    BMgr(DSMgr* initmgr);
     ~BMgr();
     // Interface functions
     /*
@@ -93,13 +99,40 @@ public:
         This function prints out the contents of the frame described by the frame_id. 
     */
     void PrintFrame(int frame_id);
+    /*
+        This function receive a series of read/write operations.
+    */
+    void ExecOpList(std::vector<Op> &oplist);
+    // find BCB for pageID, return nullptr if not found.
+    BCB* p2bcb(int pageID) {
+        int val = Hash(pageID);
+        auto* bcb = ptof[val];
+        spdlog::debug("find bcb in ptof[{}] for page {}", val, pageID);
+        while (bcb) {
+            if (bcb->pageID == pageID) {
+                return bcb;
+            }
+            bcb = bcb->next;
+        }
+        return nullptr;
+    }
+
+    // frame to bcb
+    BCB* f2bcb(int frameID) {
+        auto pageID = f2p(frameID);
+        auto* bcb = p2bcb(pageID);
+        if (!bcb) {
+            spdlog::error("should find bcb for (frame: {}, page: {})", frameID, pageID);
+            exit(1);
+        }
+        return bcb;
+    }
 private:
     std::set<int> freeFrames;
     const int FrameUnused = -1;
     int ftop[BUFSIZE]; // -1 means frame is not used
     BCB* ptof[BUFSIZE];
-    std::shared_ptr<DSMgr> dsMgr;
-    std::string dbFile;
+    DSMgr* dsMgr;
     /**
      * @brief find free frame for pageID
      * 
@@ -122,39 +155,16 @@ private:
         auto* bcbListP = ptof[pageHash];
         auto* newBCB = new BCB(pageID, frameID);
         if (!bcbListP) { // no BCB list yet
-            spdlog::debug("add new BCB in nil list in ptof[{}]", pageHash);
+            spdlog::debug("add new BCB(frame: {}, page: {}) in nil list in ptof[{}]", frameID, pageID, pageHash);
             ptof[pageHash] = newBCB;
             return newBCB;
         }
 
-        newBCB->next = bcbListP->next;
+        newBCB->next = bcbListP;
         ptof[pageHash] = newBCB;
         spdlog::debug("add new BCB(frameID: {}, pageID: {}) at the begin of ptof[{}] list", frameID, pageID, pageHash);
 
         return newBCB;
-    }
-    // find BCB for pageID, return nullptr if not found.
-    BCB* p2bcb(int pageID) {
-        int val = Hash(pageID);
-        auto* bcb = ptof[val];
-        spdlog::debug("find bcb in ptof[{}] for page {}", val, pageID);
-        while (bcb) {
-            if (bcb->pageID == pageID) {
-                return bcb;
-            }
-            bcb = bcb->next;
-        }
-        return nullptr;
-    }
-
-    BCB* f2bcb(int frameID) {
-        auto pageID = f2p(frameID);
-        auto* bcb = p2bcb(pageID);
-        if (!bcb) {
-            spdlog::error("should find bcb for (frame: {}, page: {}", frameID, pageID);
-            exit(1);
-        }
-        return bcb;
     }
 
     int f2p(int frameID) {
