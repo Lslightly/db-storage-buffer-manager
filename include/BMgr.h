@@ -1,6 +1,7 @@
 #ifndef BMGR_H
 #define BMGR_H
 
+#include "Evaluator.h"
 #include "spdlog/logger.h"
 #include "spdlog/spdlog.h"
 #include <fstream>
@@ -43,7 +44,7 @@ struct Op {
 
 class BMgr {
 public:
-    BMgr(DSMgr* initmgr);
+    BMgr(DSMgr* initmgr, Eval *ev, std::string name="naiveBMgr");
     ~BMgr();
     // Interface functions
     /*
@@ -127,12 +128,15 @@ public:
         }
         return bcb;
     }
-private:
+
+    std::string getName() { return name; }
+protected:
     std::set<int> freeFrames;
     const int FrameUnused = -1;
     int ftop[BUFSIZE]; // -1 means frame is not used
     BCB* ptof[BUFSIZE];
     DSMgr* dsMgr;
+    Eval* eval;
     /**
      * @brief find free frame for pageID
      * 
@@ -185,6 +189,7 @@ private:
         }
         ftop[frameID] = FrameUnused;
     }
+    std::string name;
 };
 
 }

@@ -1,6 +1,7 @@
 #ifndef DSBUF_MGR_H
 #define DSBUF_MGR_H
 
+#include "Evaluator.h"
 #include "spdlog/logger.h"
 #include "spdlog/spdlog.h"
 #include <fstream>
@@ -27,7 +28,7 @@ enum PageStatus {
 
 class DSMgr {
 public:
-    DSMgr(bool trunc=false): truncFile(trunc), numPages(0) {}
+    DSMgr(Eval* ev, bool trunc=false): eval(ev), truncFile(trunc), numPages(0) {}
     /*
         This function is called anytime a file needs to be opened for reading or writing. The prototype for this function is OpenFile(String filename) and returns an error code. The function opens the file specified by the filename.
     */
@@ -59,6 +60,7 @@ public:
     //  This function returns the current use_bit for the corresponding page_id.
     int GetUse(int page_id);
 private:
+    Eval* eval;
     std::string fileName;
     std::fstream currFile;
     int numPages;

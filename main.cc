@@ -9,6 +9,7 @@
 #include <vector>
 #include "DSMgr.h"
 #include "BMgr.h"
+#include "Evaluator.h"
 #include "spdlog/common.h"
 
 /*
@@ -23,18 +24,33 @@ need to be first materialized in the disk, which corresponds to the directory-ba
 data.dbf
 */
 
-const std::string OptCreateDB = "-create-db";
 const std::string OptDBName = "-db-name";
 const std::string OptLogLevel = "-log-level";
 const std::string OptBenchFile = "-bench-file";
+namespace Dbg {
+    int DebugLevel = 0;
+}
 
-void runBench(std::string benchFile, DB::BMgr& mgr);
+
+void runBench(std::string benchFile, DB::BMgr* mgr, DB::Eval* eval);
+
+void createDB(std::string dbname) {
+    DB::Eval eval;
+    DB::DSMgr dsmgr(&eval, true);
+    dsmgr.OpenFile(dbname);
+    DB::BMgr mgr(&dsmgr, &eval);
+
+    spdlog::info("creating data.dbf...");
+    spdlog::set_level(spdlog::level::off);
+    for (int i = 0; i < DB::MAXPAGES; i++) {
+        mgr.FixNewPage();
+    }
+    spdlog::set_level(spdlog::level::level_enum(Dbg::DebugLevel));
+    spdlog::info("finish creating data.dbf...");
+}
 
 int main(int argc, char *argv[]) {
     argparse::ArgumentParser program("DBDriver", "0.0.1");
-    program.add_argument(OptCreateDB)
-            .help("create data.dbf with 50000 pages")
-            .flag();
     program.add_argument(OptDBName)
             .help("database file name")
             .default_value(std::string{"data.dbf"});
@@ -55,28 +71,23 @@ int main(int argc, char *argv[]) {
     spdlog::set_level(spdlog::level::level_enum(program.get<int>(OptLogLevel)));
     spdlog::set_pattern("[%^%l%$] %v");
 
-    if (program.is_used(OptCreateDB)) {
-        auto needCreateDB = program.get<bool>(OptCreateDB);
-        DB::DSMgr dsmgr(needCreateDB);
-        dsmgr.OpenFile(program.get<std::string>(OptDBName));
-        DB::BMgr mgr(&dsmgr);
-
-        spdlog::info("creating data.dbf...");
-        for (int i = 0; i < DB::MAXPAGES; i++) {
-            mgr.FixNewPage();
-        }
-    }
+    Dbg::DebugLevel = program.get<int>(OptLogLevel);
+    spdlog::set_level(spdlog::level::level_enum(Dbg::DebugLevel));
     if (program.is_used(OptBenchFile)) {
-        DB::DSMgr dsmgr(false);
-        dsmgr.OpenFile(program.get<std::string>(OptDBName));
-        DB::BMgr mgr(&dsmgr);
+        auto dbname = program.get(OptDBName);
+        createDB(dbname);
+
+        DB::Eval eval;
+        DB::DSMgr dsmgr(&eval, false);
+        dsmgr.OpenFile(dbname);
+        DB::BMgr mgr(&dsmgr, &eval);
         std::string workloadFileName = program.get<std::string>(OptBenchFile);
-        runBench(workloadFileName, mgr);
+        runBench(workloadFileName, &mgr, &eval);
     }
     return 0;
 }
 
-void runBench(std::string benchFileName, DB::BMgr& mgr) {
+void runBench(std::string benchFileName, DB::BMgr* mgr, DB::Eval* eval) {
     spdlog::info("Running benchmark for {}...", benchFileName);
 
     std::fstream benchFile;
@@ -102,5 +113,7 @@ void runBench(std::string benchFileName, DB::BMgr& mgr) {
         });
     }
 
-    mgr.ExecOpList(oplist);
+    mgr->ExecOpList(oplist);
+    spdlog::debug("finish exec op list");
+    eval->describe();
 }

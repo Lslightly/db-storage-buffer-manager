@@ -3,6 +3,7 @@
 #include <string>
 #include "BMgr.h"
 #include "DSMgr.h"
+#include "Evaluator.h"
 #include "spdlog/common.h"
 #include "spdlog/spdlog.h"
 
@@ -11,13 +12,15 @@ namespace DB {
 class SameHashReplaceTest: public testing::Test {
 public:
     void SetUp() override {
-        dsmgr = new DSMgr(false);
+        eval = new Eval;
+        dsmgr = new DSMgr(eval, false);
         dsmgr->OpenFile("data.dbf");
-        mgr = new BMgr(dsmgr);
+        mgr = new BMgr(dsmgr, eval);
     }
     void TearDown() override {
         delete mgr;
     }
+    DB::Eval* eval;
     DB::BMgr* mgr;
     DB::DSMgr* dsmgr;
 };

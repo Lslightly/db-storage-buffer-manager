@@ -40,6 +40,7 @@ int DSMgr::CloseFile() {
 
 bFrame DSMgr::ReadPage(int pageID)
 {
+    eval->readOnce();
     bFrame tmp;
     currFile.seekg(pageID*FRAMESIZE);
     auto before = currFile.tellg();
@@ -52,6 +53,7 @@ bFrame DSMgr::ReadPage(int pageID)
 
 int DSMgr::WritePage(int pageID, bFrame& frm)
 {
+    eval->writeOnce();
     currFile.seekp(pageID*FRAMESIZE);
     auto before = currFile.tellp();
     currFile.write(frm.field, FRAMESIZE);

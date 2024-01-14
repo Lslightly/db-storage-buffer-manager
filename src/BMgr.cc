@@ -9,6 +9,7 @@
 #include <tuple>
 #include <utility>
 #include <vector>
+#include "Evaluator.h"
 #include "spdlog/logger.h"
 #include "spdlog/sinks/basic_file_sink.h"
 #include "spdlog/spdlog.h"
@@ -28,12 +29,14 @@ void setFrameToBuf(int frameID, bFrame &frame) {
     GlobalBuf[frameID] = frame;
 }
 
-BMgr::BMgr(DSMgr* initDSMgr)
+BMgr::BMgr(DSMgr* initDSMgr, Eval* ev, std::string n)
 {
+    name = n;
     for (int i = 0; i < BUFSIZE; i++) {
         freeFrames.insert(i);
     }
     dsMgr = initDSMgr;
+    eval = ev;
     for (int i = 0; i < BUFSIZE; i++) {
         ftop[i] = FrameUnused;
         ptof[i] = nullptr;
@@ -61,11 +64,13 @@ int BMgr::FixPage(int pageID, int _prot)
 {
     auto* bcb = p2bcb(pageID);
     if (bcb) {
+        eval->hit();
         spdlog::debug("pageID {} in buffer, return frameID {}", bcb->frameID);
         bcb->count++;
         return bcb->frameID;
     }
 
+    eval->miss();
     spdlog::debug("pageID {} not in buffer, need to load from database file", pageID);
     bFrame newFrame = dsMgr->ReadPage(pageID);
 
@@ -145,9 +150,12 @@ int BMgr::SelectVictim() {
     RemoveBCB(bcb, pageID);
 
     if (bcb->dirty) {
+        eval->dirtyVictim();
         spdlog::debug("writing dirty victim page {}", pageID);
         dsMgr->WritePage(pageID, *getFrameFromBuf(victimFrameID));
         bcb->dirty = 0;
+    } else {
+        eval->cleanVictim();
     }
 
     delete bcb;
@@ -217,12 +225,23 @@ void BMgr::PrintFrame(int frameID) {
 void BMgr::ExecOpList(std::vector<Op> &oplist) {
     for (auto op: oplist) {
         auto pageID = op.pageID;
+        eval->startTimer();
         auto frameID = FixPage(pageID, 0);
         if (op.isWrite) {
+            // simulate write operation
+            bFrame tmp;
+            initFrame(tmp, pageID);
+            setFrameToBuf(frameID, tmp);
             SetDirty(frameID);
+        } else {
+            // similuate read operation
+            PrintFrame(frameID);
         }
+        eval->endTimer(op.isWrite);
     }
+    eval->startTimer();
     WriteDirtys();
+    eval->endWriteDirtyTimes();
 }
 
 std::tuple<int, bool> BMgr::findFreeFrameForPage(int pageID) {
