@@ -60,13 +60,15 @@ BMgr::~BMgr() {
     dsMgr->CloseFile();
 }
 
-int BMgr::FixPage(int pageID, int _prot)
+int BMgr::FixPage(int pageID, int isWrite)
 {
     auto* bcb = p2bcb(pageID);
     if (bcb) {
         eval->hit();
         spdlog::debug("pageID {} in buffer, return frameID {}", bcb->frameID);
         bcb->count++;
+        if (isWrite)
+            bcb->dirty = 1;
         return bcb->frameID;
     }
 
@@ -81,6 +83,8 @@ int BMgr::FixPage(int pageID, int _prot)
 
     bcb = addNewBCB(freeFrameID, pageID);
     bcb->count++;
+    if (isWrite)
+        bcb->dirty = 1;
     setFrameToPage(freeFrameID, pageID);
     setFrameToBuf(freeFrameID, newFrame);
     return freeFrameID;
@@ -232,7 +236,6 @@ void BMgr::ExecOpList(std::vector<Op> &oplist) {
             bFrame tmp;
             initFrame(tmp, pageID);
             setFrameToBuf(frameID, tmp);
-            SetDirty(frameID);
         } else {
             // similuate read operation
             PrintFrame(frameID);

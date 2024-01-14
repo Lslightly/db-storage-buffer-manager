@@ -52,7 +52,7 @@ public:
         the `pageID` is in the record_id of the record
         the function looks whether the page is in the buffer already and returns the frame_id. If the page is not in the buffer yet, it selects a victim page, if needed, and loads in the requested page.
     */
-    int FixPage(int page_id, int prot);
+    int FixPage(int page_id, int isWrite);
     /*
         This returns a page_id and a frame_id.
         This function is used when a new page is needed on an insert, index split, or object creation. The page_id is returned in order to assign to the record_id and metadata. This function will find an empty page that the File and Access Manager can use to store some data.

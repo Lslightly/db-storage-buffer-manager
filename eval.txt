@@ -1,7 +1,7 @@
 statistic:
 read, write, IO,
-12, 5, 17
-70.59%, 29.41%, 100.00%
+12, 0, 12
+100.00%, 0.00%, 100.00%
 
 miss, hit, buf access
 12, 1, 13
@@ -12,6 +12,6 @@ dirty victims, clean victims, victims
 -nan%, -nan%, 100.00%
 
 read T(us), write T(us), end dirty write T(us), total T(us)
-536, 264, 148, 948
-56.54%, 27.85%, 15.61%, 100.00%
+496, 211, 50, 757
+65.52%, 27.87%, 6.61%, 100.00%
 
