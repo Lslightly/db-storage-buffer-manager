@@ -34,18 +34,17 @@ int main(int argc, char *argv[]) {
     argparse::ArgumentParser program("DBDriver", "0.0.1");
     program.add_argument(OptCreateDB)
             .help("create data.dbf with 50000 pages")
-            .default_value(false)
-            .implicit_value(true);
+            .flag();
     program.add_argument(OptDBName)
             .help("database file name")
-            .default_value(std::string("data.dbf"));
+            .default_value(std::string{"data.dbf"});
     program.add_argument(OptLogLevel)
             .help("log level. 6 for off, 1 for debug, 2 for info, 4 for err")
             .default_value(2)
             .scan<'i', int>();
     program.add_argument(OptBenchFile)
             .help("benchmark file")
-            .default_value(std::string("test/data-5w-50w-zipf.txt"));
+            .default_value(std::string{"test/data-5w-50w-zipf.txt"});
     try {
         program.parse_args(argc, argv);
     } catch (const std::exception& e) {
@@ -53,25 +52,24 @@ int main(int argc, char *argv[]) {
         std::exit(1);
     }
 
-    DB::DSMgr dsmgr(program.get<bool>(OptCreateDB));
-    dsmgr.OpenFile(program.get<std::string>(OptDBName));
-    DB::BMgr mgr(&dsmgr);
-
     spdlog::set_level(spdlog::level::level_enum(program.get<int>(OptLogLevel)));
     spdlog::set_pattern("[%^%l%$] %v");
 
-    if (program.is_used(OptCreateDB) && program.is_used(OptBenchFile)) {
-        spdlog::error("{} and {} are exclusive.", OptCreateDB, OptBenchFile);
-        exit(1);
-    }
-    if (program[OptCreateDB] == true) {
+    if (program.is_used(OptCreateDB)) {
+        auto needCreateDB = program.get<bool>(OptCreateDB);
+        DB::DSMgr dsmgr(needCreateDB);
+        dsmgr.OpenFile(program.get<std::string>(OptDBName));
+        DB::BMgr mgr(&dsmgr);
+
         spdlog::info("creating data.dbf...");
         for (int i = 0; i < DB::MAXPAGES; i++) {
             mgr.FixNewPage();
         }
-        return 0;
     }
-    if (program[OptBenchFile] == true) {
+    if (program.is_used(OptBenchFile)) {
+        DB::DSMgr dsmgr(false);
+        dsmgr.OpenFile(program.get<std::string>(OptDBName));
+        DB::BMgr mgr(&dsmgr);
         std::string workloadFileName = program.get<std::string>(OptBenchFile);
         runBench(workloadFileName, mgr);
     }
