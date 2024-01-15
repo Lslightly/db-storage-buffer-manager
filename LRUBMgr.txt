@@ -1,0 +1,17 @@
+statistic:
+read, write, IO,
+330435, 172955, 503390
+65.64%, 34.36%, 100.00%
+
+miss, hit, buf access
+330435, 169565, 500000
+66.09%, 33.91%, 100.00%
+
+dirty victims, clean victims, victims
+172386, 157025, 329411
+52.33%, 47.67%, 100.00%
+
+read T(us), write T(us), end dirty write T(us), total T(us)
+3045690, 3003697, 219, 6049606
+50.35%, 49.65%, 0.00%, 100.00%
+

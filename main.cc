@@ -4,11 +4,15 @@
 #include <iostream>
 #include <argparse/argparse.hpp>
 #include <defer/defer.hpp>
+#include <list>
+#include <map>
 #include <spdlog/spdlog.h>
 #include <string>
+#include <tuple>
 #include <vector>
 #include "DSMgr.h"
 #include "BMgr.h"
+#include "LRUBMgr.h"
 #include "Evaluator.h"
 #include "spdlog/common.h"
 
@@ -27,9 +31,6 @@ data.dbf
 const std::string OptDBName = "-db-name";
 const std::string OptLogLevel = "-log-level";
 const std::string OptBenchFile = "-bench-file";
-namespace Dbg {
-    int DebugLevel = 0;
-}
 
 
 void runBench(std::string benchFile, DB::BMgr* mgr, DB::Eval* eval);
@@ -40,12 +41,9 @@ void createDB(std::string dbname) {
     dsmgr.OpenFile(dbname);
     DB::BMgr mgr(&dsmgr, &eval);
 
-    spdlog::info("creating data.dbf...");
-    spdlog::set_level(spdlog::level::off);
     for (int i = 0; i < DB::MAXPAGES; i++) {
         mgr.FixNewPage();
     }
-    spdlog::set_level(spdlog::level::level_enum(Dbg::DebugLevel));
     spdlog::info("finish creating data.dbf...");
 }
 
@@ -71,24 +69,39 @@ int main(int argc, char *argv[]) {
     spdlog::set_level(spdlog::level::level_enum(program.get<int>(OptLogLevel)));
     spdlog::set_pattern("[%^%l%$] %v");
 
-    Dbg::DebugLevel = program.get<int>(OptLogLevel);
-    spdlog::set_level(spdlog::level::level_enum(Dbg::DebugLevel));
     if (program.is_used(OptBenchFile)) {
-        auto dbname = program.get(OptDBName);
-        createDB(dbname);
+        std::list<std::tuple<DB::Eval*, DB::DSMgr*, DB::BMgr*>> mgrList;
+        auto* tmpEval = new DB::Eval;
+        auto* tmpDSMgr = new DB::DSMgr(tmpEval, false);
+        DB::BMgr* tmpBMgr = new DB::BMgr(tmpDSMgr, tmpEval);
+        mgrList.push_back(std::make_tuple(tmpEval, tmpDSMgr, tmpBMgr));
 
-        DB::Eval eval;
-        DB::DSMgr dsmgr(&eval, false);
-        dsmgr.OpenFile(dbname);
-        DB::BMgr mgr(&dsmgr, &eval);
+        tmpEval = new DB::Eval;
+        tmpDSMgr = new DB::DSMgr(tmpEval, false);
+        tmpBMgr = new DB::LRUBMgr(tmpDSMgr, tmpEval);
+        mgrList.push_back(std::make_tuple(tmpEval, tmpDSMgr, tmpBMgr));
+        
+        auto dbname = program.get(OptDBName);
         std::string workloadFileName = program.get<std::string>(OptBenchFile);
-        runBench(workloadFileName, &mgr, &eval);
+
+        for (auto [eval, dsmgr, mgr]: mgrList) {
+            spdlog::info("creating data.dbf...");
+            spdlog::set_level(spdlog::level::off);
+            createDB(dbname);
+            spdlog::set_level(spdlog::level::level_enum(program.get<int>(OptLogLevel)));
+            eval->setOutFile(mgr->getName()+".txt");
+            dsmgr->OpenFile(dbname);
+            runBench(workloadFileName, mgr, eval);
+            delete mgr;
+            delete dsmgr;
+            delete eval;
+        }
     }
     return 0;
 }
 
 void runBench(std::string benchFileName, DB::BMgr* mgr, DB::Eval* eval) {
-    spdlog::info("Running benchmark for {}...", benchFileName);
+    spdlog::info("Running benchmark for {} with replace method {}...", benchFileName, mgr->getName());
 
     std::fstream benchFile;
     try {

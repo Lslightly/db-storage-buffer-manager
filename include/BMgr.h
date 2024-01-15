@@ -45,7 +45,7 @@ struct Op {
 class BMgr {
 public:
     BMgr(DSMgr* initmgr, Eval *ev, std::string name="naiveBMgr");
-    ~BMgr();
+    virtual ~BMgr();
     // Interface functions
     /*
         return the frame_id of the page
@@ -68,6 +68,9 @@ public:
     int NumFreeFrames();
 
     // Internal Functions
+
+    // Get victim frame id. Do nothing to BCB and dirty pages.
+    virtual int getVictimFrameID();
     /*
         This function selects a frame to replace. If the dirty bit of the selected frame is set then the page needs to be written on to the disk. The according BCB will also be removed. 
     */
@@ -83,7 +86,7 @@ public:
     /*
         This function removes the LRU element from the list.
     */
-    void RemoveLRUEle(int frid);
+    virtual void RemoveLRUEle(int frid);
     /*
         This function sets the dirty bit for the frame_id. This dirty bit is used to know whether or not to write out the frame. A frame must be written if the contents have been modified in any way. This includes any directory pages and data pages. If the bit is 1, it will be written. If this bit is zero, it will not be written.
     */
@@ -137,6 +140,15 @@ protected:
     BCB* ptof[BUFSIZE];
     DSMgr* dsMgr;
     Eval* eval;
+
+    /**
+     * @brief consider FixPage as an access to frameID
+     * 
+     * @param frameID 
+     * @param isWrite 
+     */
+    virtual void accessFrame(int frameID, int isWrite);
+
     /**
      * @brief find free frame for pageID
      * 
@@ -175,7 +187,7 @@ protected:
         return ftop[frameID];
     }
     bool isBufferFull() { return freeFrames.size() == 0; }
-    bool isFrameUsed(int frameID) { return !(ftop[frameID] == FrameUnused); }
+    bool isFrameUsed(int frameID) { return ftop[frameID] != FrameUnused; }
     void setFrameToPage(int frameID, int pageID) {
         spdlog::debug("set frame {} to page {}", frameID, pageID);
         if (!isFrameUsed(frameID)) {

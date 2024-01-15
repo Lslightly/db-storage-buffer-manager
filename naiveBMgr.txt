@@ -1,0 +1,17 @@
+statistic:
+read, write, IO,
+328907, 161542, 490449
+67.06%, 32.94%, 100.00%
+
+miss, hit, buf access
+328907, 171093, 500000
+65.78%, 34.22%, 100.00%
+
+dirty victims, clean victims, victims
+160552, 167331, 327883
+48.97%, 51.03%, 100.00%
+
+read T(us), write T(us), end dirty write T(us), total T(us)
+222018, 210087, 258, 432363
+51.35%, 48.59%, 0.06%, 100.00%
+

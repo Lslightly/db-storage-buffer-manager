@@ -67,8 +67,13 @@ int BMgr::FixPage(int pageID, int isWrite)
         eval->hit();
         spdlog::debug("pageID {} in buffer, return frameID {}", bcb->frameID);
         bcb->count++;
-        if (isWrite)
+        if (isWrite) {
+            spdlog::debug("make page dirty {}", pageID);
             bcb->dirty = 1;
+        } else {
+            spdlog::debug("read page {}", pageID);
+        }
+        accessFrame(bcb->frameID, isWrite);
         return bcb->frameID;
     }
 
@@ -85,6 +90,7 @@ int BMgr::FixPage(int pageID, int isWrite)
     bcb->count++;
     if (isWrite)
         bcb->dirty = 1;
+    accessFrame(freeFrameID, isWrite);
     setFrameToPage(freeFrameID, pageID);
     setFrameToBuf(freeFrameID, newFrame);
     return freeFrameID;
@@ -139,8 +145,13 @@ int BMgr::NumFreeFrames() {
     return BUFSIZE-freeFrames.size();
 }
 
+int BMgr::getVictimFrameID() {
+    return 0;
+}
+
 int BMgr::SelectVictim() {
-    int victimFrameID = 0;
+    int victimFrameID = getVictimFrameID();
+    RemoveLRUEle(victimFrameID);
 
     auto* bcb = f2bcb(victimFrameID);
     if (!bcb) {
@@ -196,7 +207,7 @@ void BMgr::RemoveBCB(BCB* ptr, int pageID) {
 }
 
 void BMgr::RemoveLRUEle(int frameID) {
-    // TODO
+    // do nothing
 }
 
 void BMgr::SetDirty(int frameID) {
@@ -210,13 +221,17 @@ void BMgr::UnsetDirty(int frameID) {
 }
 
 void BMgr::WriteDirtys() {
+    spdlog::debug("writing dirties...");
     for (int frameID = 0; frameID < BUFSIZE; frameID++) {
         if (isFrameUsed(frameID)) {
             auto* bcb = f2bcb(frameID);
             auto pageID = f2p(frameID);
-            if (bcb->dirty == 1) {
+            if (bcb->dirty) {
+                spdlog::debug("page {} dirty", pageID);
                 dsMgr->WritePage(pageID, *getFrameFromBuf(frameID));
                 bcb->dirty = 0;
+            } else {
+                spdlog::info("page {} is not dirty", f2p(frameID));
             }
         }
     }
@@ -230,7 +245,7 @@ void BMgr::ExecOpList(std::vector<Op> &oplist) {
     for (auto op: oplist) {
         auto pageID = op.pageID;
         eval->startTimer();
-        auto frameID = FixPage(pageID, 0);
+        auto frameID = FixPage(pageID, op.isWrite);
         if (op.isWrite) {
             // simulate write operation
             bFrame tmp;
@@ -246,6 +261,9 @@ void BMgr::ExecOpList(std::vector<Op> &oplist) {
     WriteDirtys();
     eval->endWriteDirtyTimes();
 }
+
+// do nothing
+void BMgr::accessFrame(int frameID, int isWrite) {}
 
 std::tuple<int, bool> BMgr::findFreeFrameForPage(int pageID) {
     spdlog::debug("findFreeFrameForPage...");
