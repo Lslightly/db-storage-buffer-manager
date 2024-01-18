@@ -16,7 +16,7 @@
 
 namespace DB {
 
-const int BUFSIZE = 1024;
+const int BUFSIZE = 11000;
 
 void initFrame(bFrame& frame, int pageID);
 

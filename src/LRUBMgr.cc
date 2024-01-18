@@ -8,19 +8,27 @@ LRUBMgr::~LRUBMgr() {
 }
 
 void LRUBMgr::accessFrame(int frameID, int isWrite) {
-    for (auto iter = lruList.begin(); iter != lruList.end(); iter++) {
-        if (iter->frameID == frameID) {
-            lruList.erase(iter);
-            break;
-        }
+    eval->startMaintain();
+
+    if (frame2iter.find(frameID) != frame2iter.end()) {
+        auto iter = frame2iter[frameID];
+        lruList.erase(iter);
     }
     lruList.push_front(LRUElem{
         frameID,
     });
+    frame2iter[frameID] = lruList.begin();
+
+    eval->endMaintain();
 }
 
 void LRUBMgr::RemoveLRUEle(int frameID) {
-    lruList.pop_back();
+    eval->startMaintain();
+
+    lruList.erase(frame2iter[frameID]);
+    frame2iter.erase(frameID);
+
+    eval->endMaintain();
 }
 
 int LRUBMgr::getVictimFrameID() {

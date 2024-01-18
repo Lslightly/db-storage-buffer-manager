@@ -13,6 +13,8 @@ namespace DB {
 class Eval {
 public:
     using TimeUnit = std::chrono::microseconds;
+    using TimerTy = std::chrono::system_clock::time_point;
+    using Clock = std::chrono::high_resolution_clock;
     Eval(std::string outfile="eval.txt"): outfName(outfile), readCnt(0), writeCnt(0), missCnt(0), hitCnt(0), dirtyVictimCnt(0), cleanVictimCnt(0), readTs(), writeTs() {}
     void readOnce() { readCnt++; }
     void writeOnce() { writeCnt++; }
@@ -20,11 +22,11 @@ public:
     void hit() { hitCnt++; }
     void dirtyVictim() { dirtyVictimCnt++; }
     void cleanVictim() { cleanVictimCnt++; }
-    void startTimer() { timer = std::chrono::high_resolution_clock::now(); }
+    void startTimer() { timer = Clock::now(); }
     void endTimer(bool isWrite) {
         auto duration = std::chrono::duration_cast<TimeUnit>
         (
-            std::chrono::high_resolution_clock::now()
+            Clock::now()
             - timer
         );
         if (!isWrite)
@@ -35,8 +37,16 @@ public:
     void endWriteDirtyTimes() {
         finishWriteDirtys = std::chrono::duration_cast<TimeUnit>
         (
-            std::chrono::high_resolution_clock::now()
+            Clock::now()
             - timer
+        );
+    }
+    void startMaintain() {
+        getVictimMaintainTimer = Clock::now();
+    }
+    void endMaintain() {
+        maintainTimes.push_back(
+            std::chrono::duration_cast<TimeUnit>(Clock::now() - getVictimMaintainTimer)
         );
     }
     void describe() {
@@ -54,6 +64,11 @@ public:
             writeTotalT += writeT;
         }
         totalT += writeTotalT;
+        TimeUnit maintainT = TimeUnit::zero();
+        for (auto mT: maintainTimes) {
+            maintainT += mT;
+        }
+
 #define CntAndPercent(a, b, total) \
     a, b, total,\
     percent(a, total), percent(b, total), 100.0
@@ -75,14 +90,19 @@ dirty victims, clean victims, victims\n\
 {}, {}, {}\n\
 {:03.2f}%, {:03.2f}%, {:03.2f}%\n\
 \n\
-read T(us), write T(us), end dirty write T(us), total T(us)\n\
+read T(us), write T(us), end write dirties T(us), total T(us)\n\
 {}, {}, {}, {}\n\
 {:03.2f}%, {:03.2f}%, {:03.2f}%, {:03.2f}%\n\
-\n",
+\n\
+maintain replacement data struct(us), \n\
+{}\n\
+{:03.2f}%",
 CntAndPercent(readCnt, writeCnt, IO),
 CntAndPercent(missCnt, hitCnt, bufAccess),
 CntAndPercent(dirtyVictimCnt, cleanVictimCnt, victims),
-CntAndPercent4(readTotalT.count(), writeTotalT.count(), finishWriteDirtys.count(), totalT.count())
+CntAndPercent4(readTotalT.count(), writeTotalT.count(), finishWriteDirtys.count(), totalT.count()),
+maintainT.count(),
+percent(maintainT.count(), totalT.count())
 );
         std::fclose(outf);
     }
@@ -102,7 +122,9 @@ private:
     int dirtyVictimCnt, cleanVictimCnt;
     std::list<TimeUnit> readTs, writeTs;
     TimeUnit finishWriteDirtys;
-    std::chrono::system_clock::time_point timer;
+    TimerTy timer;
+    TimerTy getVictimMaintainTimer; // 记录如LRU为了维持数据结构花费的时间
+    std::list<TimeUnit> maintainTimes;
 };
 
 }

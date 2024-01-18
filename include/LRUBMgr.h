@@ -11,7 +11,6 @@ public:
 
     struct LRUElem {
         int frameID;
-        int cnt;
     };
     using LRUList = std::list<LRUElem>;
     using LRUIter = LRUList::iterator;
