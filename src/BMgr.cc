@@ -1,3 +1,4 @@
+#include "defer/defer.hpp"
 #include "DSMgr.h"
 #include "BMgr.h"
 #include <cstdlib>
@@ -147,6 +148,9 @@ int BMgr::NumFreeFrames() {
 }
 
 int BMgr::getVictimFrameID() {
+    eval->startMaintain();
+    defer [&]{eval->endMaintain();};
+
     return 0;
 }
 
@@ -209,6 +213,8 @@ void BMgr::RemoveBCB(BCB* ptr, int pageID) {
 
 void BMgr::RemoveLRUEle(int frameID) {
     // do nothing
+    eval->startMaintain();
+    defer [&]{eval->endMaintain();};
 }
 
 void BMgr::SetDirty(int frameID) {
@@ -264,7 +270,10 @@ void BMgr::ExecOpList(std::vector<Op> &oplist) {
 }
 
 // do nothing
-void BMgr::accessFrame(int frameID, int isWrite) {}
+void BMgr::accessFrame(int frameID, int isWrite) {
+    eval->startMaintain();
+    defer [&]{eval->endMaintain();};
+}
 
 std::tuple<int, bool> BMgr::findFreeFrameForPage(int pageID) {
     spdlog::debug("findFreeFrameForPage...");

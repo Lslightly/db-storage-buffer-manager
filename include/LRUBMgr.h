@@ -48,6 +48,7 @@ public:
     virtual int getVictimFrameID() override;
     virtual void accessFrame(int frameID, int isWrite) override;
 private:
+    bool full;
     int K = 2;
     using Frame2IterInfo = std::unordered_map<int, IterInfo>;
     LRUList ltKlist, geKList;

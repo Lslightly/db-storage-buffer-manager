@@ -1,5 +1,7 @@
 #include "LRUBMgr.h"
+#include "BMgr.h"
 #include "defer/defer.hpp"
+#include "spdlog/spdlog.h"
 
 namespace DB {
 
@@ -32,6 +34,14 @@ void LRUBMgr::RemoveLRUEle(int frameID) {
 }
 
 int LRUBMgr::getVictimFrameID() {
+    eval->startMaintain();
+    defer [&]{ eval->endMaintain(); };
+
+    if (lruList.size() != BUFSIZE) {
+        spdlog::error("get victim when buffer is not full?");
+        exit(1);
+    }
+
     return lruList.back().frameID;
 }
 
@@ -93,6 +103,11 @@ void LRU_K_BMgr::accessFrame(int frameID, int isWrite) {
 int LRU_K_BMgr::getVictimFrameID() {
     eval->startMaintain();
     defer [&]{ eval->endMaintain(); };
+
+    if (ltKlist.size() + geKList.size() != BUFSIZE) {
+        spdlog::error("get victim when buffer is not full?");
+        exit(1);
+    }
 
     if (!ltKlist.empty()) {
         return ltKlist.back().frameID;

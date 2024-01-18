@@ -21,12 +21,13 @@ void ClockBMgr::accessFrame(int frameID, int isWrite) {
 }
 
 int ClockBMgr::getVictimFrameID() {
+    eval->startMaintain();
+    defer [&]{eval->endMaintain();};
+
     if (!full) {
         spdlog::error("get victim when buffer is not full?");
         exit(1);
     }
-    eval->startMaintain();
-    defer [&]{eval->endMaintain();};
     while (isReferenced()) {
         unsetReferenced();
         incCurrent();
