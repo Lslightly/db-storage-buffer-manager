@@ -11,6 +11,12 @@ FetchContent_Declare(
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
+
+if(DEFINED BUF)
+  add_compile_options(-DBUF=${BUF})
+endif()
+
+
 add_subdirectory(src)
 add_subdirectory(unittest)
 aux_source_directory(. DIR_SRCS)

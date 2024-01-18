@@ -107,7 +107,7 @@ int main(int argc, char *argv[]) {
             spdlog::set_level(spdlog::level::off);
             createDB(dbname);
             spdlog::set_level(spdlog::level::level_enum(program.get<int>(OptLogLevel)));
-            eval->setOutFile(mgr->getName()+".txt");
+            eval->setOutFile("eval/"+mgr->getName()+"/"+std::to_string(DB::BUFSIZE)+".txt");
             dsmgr->OpenFile(dbname);
             runBench(workloadFileName, mgr, eval);
             delete mgr;
