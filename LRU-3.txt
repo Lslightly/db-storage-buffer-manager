@@ -1,0 +1,20 @@
+statistic:
+read, write, IO,
+152627, 84594, 237221
+64.34%, 35.66%, 100.00%
+
+miss, hit, buf access
+152627, 347373, 500000
+30.53%, 69.47%, 100.00%
+
+dirty victims, clean victims, victims
+75668, 65959, 141627
+53.43%, 46.57%, 100.00%
+
+read T(us), write T(us), end write dirties T(us), total T(us)
+411689, 413920, 2499, 828108
+49.71%, 49.98%, 0.30%, 100.00%
+
+maintain replacement data struct(us), 
+7384
+0.89%

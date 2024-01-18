@@ -71,15 +71,26 @@ int main(int argc, char *argv[]) {
 
     if (program.is_used(OptBenchFile)) {
         std::list<std::tuple<DB::Eval*, DB::DSMgr*, DB::BMgr*>> mgrList;
+        
+        // naive
         auto* tmpEval = new DB::Eval;
         auto* tmpDSMgr = new DB::DSMgr(tmpEval, false);
         DB::BMgr* tmpBMgr = new DB::BMgr(tmpDSMgr, tmpEval);
         mgrList.push_back(std::make_tuple(tmpEval, tmpDSMgr, tmpBMgr));
 
+        // LRU
         tmpEval = new DB::Eval;
         tmpDSMgr = new DB::DSMgr(tmpEval, false);
         tmpBMgr = new DB::LRUBMgr(tmpDSMgr, tmpEval);
         mgrList.push_back(std::make_tuple(tmpEval, tmpDSMgr, tmpBMgr));
+
+        // LRU-k
+        for (auto k = 2; k < 5; k++) {
+            tmpEval = new DB::Eval;
+            tmpDSMgr = new DB::DSMgr(tmpEval, false);
+            tmpBMgr = new DB::LRU_K_BMgr(tmpDSMgr, tmpEval, k);
+            mgrList.push_back(std::make_tuple(tmpEval, tmpDSMgr, tmpBMgr));
+        }
         
         auto dbname = program.get(OptDBName);
         std::string workloadFileName = program.get<std::string>(OptBenchFile);

@@ -122,6 +122,7 @@ NewPage BMgr::FixNewPage() {
 
     auto* bcb = addNewBCB(newFrameID, newPageId);
     bcb->count++;
+    accessFrame(newFrameID, 1);
     setFrameToBuf(newFrameID, newFrame);
     setFrameToPage(newFrameID, newPageId);
     spdlog::debug("finish FixNewPage...");
