@@ -10,6 +10,7 @@
 #include <string>
 #include <tuple>
 #include <vector>
+#include "ClockBMgr.h"
 #include "DSMgr.h"
 #include "BMgr.h"
 #include "LRUBMgr.h"
@@ -91,6 +92,12 @@ int main(int argc, char *argv[]) {
             tmpBMgr = new DB::LRU_K_BMgr(tmpDSMgr, tmpEval, k);
             mgrList.push_back(std::make_tuple(tmpEval, tmpDSMgr, tmpBMgr));
         }
+
+        // Clock
+        tmpEval = new DB::Eval;
+        tmpDSMgr = new DB::DSMgr(tmpEval, false);
+        tmpBMgr = new DB::ClockBMgr(tmpDSMgr, tmpEval);
+        mgrList.push_back(std::make_tuple(tmpEval, tmpDSMgr, tmpBMgr));
         
         auto dbname = program.get(OptDBName);
         std::string workloadFileName = program.get<std::string>(OptBenchFile);
