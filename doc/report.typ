@@ -157,6 +157,8 @@ caption: "BCB结构定义",
 
 == 不同替换策略的性能对比
 
+由于请求中80%的请求在前20%的页号上，因此为了充分发挥缓存的作用，将缓存大小BUFSIZE设置为 $12288 > 10000 = 1/2 times 50000$。
+
 不同策略的性能对比如@io12288 - @maintain12288 所示。可以发现LRU-2策略相比于其他版本的替换策略在#io、#hitRatio、#victimNum 指标上效果更好。LRU-k(k=2,3,4)策略在#io、#hitRatio、#victimNum 上效果比LRU好。LRU算法的#io 甚至比不过naive版本的实现。
 
 在LRU-k系列算法中，随着K增大，#io 并没有减少，#hitRatio 也有所降低，#victimNum 也有所减少。说明k不是越大越好。
