@@ -12,9 +12,9 @@ dirty victims, clean victims, victims
 54.82%, 45.18%, 100.00%
 
 read T(us), write T(us), end write dirties T(us), total T(us)
-440681, 447118, 1913, 889712
-49.53%, 50.25%, 0.22%, 100.00%
+449855, 450980, 1682, 902517
+49.84%, 49.97%, 0.19%, 100.00%
 
 maintain replacement data struct(us), 
-5551
+5573
 0.62%

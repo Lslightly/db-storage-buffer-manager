@@ -29,7 +29,7 @@ void LRUBMgr::RemoveLRUEle(int frameID) {
     eval->startMaintain();
     defer [&]{ eval->endMaintain(); };
 
-    lruList.erase(frame2iter.at(frameID));
+    lruList.pop_back();
     frame2iter.erase(frameID);
 }
 
