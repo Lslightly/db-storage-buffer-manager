@@ -20,7 +20,7 @@
 
 = 摘要
 
-本项目实现了数据库管理系统（DBMS）中不考虑并发情况下的#dsmgr、#bmgr。在缓冲替换策略上，本项目实现了naive版本、LRU、LRU-K、Clock算法，并在通过#FixNewPage 构建好的包含50000个页的堆文件上实现按照trace文件操作数据库堆文件进行了#io、#hitRatio、#time、#victimNum、#maintainTime 等性能数据的测量与对比。本项目有以下发现：1) LRU-2策略相比于其他版本的替换策略在#io、#hitRatio、#victimNum 指标上效果更好。2) LRU-k(k=2,3,4)策略在#io、#hitRatio、#victimNum 上效果比LRU好。3) Clock算法在#time 和#maintainTime 上比LRU系算法好，但是在#io、#hitRatio、#victimNum 指标上效果较差。
+本项目实现了数据库管理系统（DBMS）中不考虑并发情况下的#dsmgr、#bmgr。在缓冲替换策略上，本项目实现了naive版本、LRU、LRU-K、Clock算法，并在通过#FixNewPage 构建好的包含50000个页的堆文件上实现按照trace文件操作数据库堆文件进行了#io、#hitRatio、#time、#victimNum、#maintainTime 等性能数据的测量与对比。本项目有以下发现：1) LRU-2策略相比于其他版本的替换策略在#io、#hitRatio、#victimNum 指标上效果更好。2) LRU-k中k的设置不是越大越好。3) LRU-k(k=2,3,4)策略在#io、#hitRatio、#victimNum 上效果比LRU好。4) Clock算法在#time 和#maintainTime 上比LRU系算法好，但是在#io、#hitRatio、#victimNum 指标上效果较差。
 
 = 管理器设计
 
@@ -157,7 +157,11 @@ caption: "BCB结构定义",
 
 == 不同替换策略的性能对比
 
-不同策略的性能对比如下图所示。
+不同策略的性能对比如@io12288 - @maintain12288 所示。可以发现LRU-2策略相比于其他版本的替换策略在#io、#hitRatio、#victimNum 指标上效果更好。LRU-k(k=2,3,4)策略在#io、#hitRatio、#victimNum 上效果比LRU好。LRU算法的#io 甚至比不过naive版本的实现。
+
+在LRU-k系列算法中，随着K增大，#io 并没有减少，#hitRatio 也有所降低，#victimNum 也有所减少。说明k不是越大越好。
+
+同时Clock算法相比于LRU系算法在#time 和#maintainTime 上效果较好，但是#io、#hitRatio、#victimNum 指标上效果甚至比naive算法还要差。
 
 #grid(
   rows: 2,
@@ -168,17 +172,16 @@ caption: "BCB结构定义",
         image("figures/io12288.png"),
         caption: [BUFSIZE=12288时不同策略的#io],
       ) <io12288>
-    
-      #figure(
-        image("figures/hitRatio12288.png", width: 90%),
-        caption: [BUFSIZE=12288时不同策略的#hitRatio],
-      ) <hitRatio12288>
-  ],
-  [
       #figure(
         image("figures/victim12288.png"),
         caption: [BUFSIZE=12288时不同策略的#victimNum],
       ) <victim12288>
+  ],
+  [
+      #figure(
+        image("figures/hitRatio12288.png", width: 90%),
+        caption: [BUFSIZE=12288时不同策略的#hitRatio],
+      ) <hitRatio12288>
       #figure(
         image("figures/totalT12288.png"),
         caption: [BUFSIZE=12288时不同策略的#time],
@@ -192,3 +195,38 @@ caption: "BCB结构定义",
 
 == LRU-2算法在不同BUFSIZE下的性能变化
 
+不同BUFSIZE对于替换策略的效果也有影响。对于LRU-2算法来说，其#io、#hitRatio、#time 的变化如@lrubegin - @lruend 所示。当BUFSIZE增大时，#io、#hitRatio、#time 效果都显著变好。但是当BUFSIZE进一步扩大时，#time 并没有进一步减少，主要是因为BUFSIZE太大导致维护代价变高，如@lrumaintain 所示。
+
+#grid(
+  rows: 2,
+  columns: 2,
+  column-gutter: 1em,
+  [
+    #figure(
+      image("figures/lru-io.png"),
+      caption: [LRU-2#io 随BUFSIZE变化折线图]
+    ) <lrubegin>
+  ],
+  [
+    #figure(
+      image("figures/lru-hitRatio.png"),
+      caption: [LRU-2#hitRatio 随BUFSIZE变化折线图]
+    )
+  ],
+  [
+    #figure(
+      image("figures/lru-time.png"),
+      caption: [LRU-2#time 随BUFSIZE变化折线图]
+    ) <lruend>
+  ],
+  [
+    #figure(
+      image("figures/lru-maintain.png"),
+      caption: [LRU-2#maintainTime 随BUFSIZE变化折线图]
+    ) <lrumaintain>
+  ]
+)
+
+= 总结
+
+本项目实现了#dsmgr、#bmgr 以及多种替换策略。在替换策略的对比中发现LRU-2的效果较好。LRU-k中k的设置不是越大越好。Clock算法在#time 和#maintainTime 上比LRU系算法好，但是在#io、#hitRatio、#victimNum 指标上效果较差。
